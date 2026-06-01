@@ -35,7 +35,7 @@ jobs:
 
       - name: Build
         run: go build -o app ./cmd/bot
-
+        
       - name: Write environment variables
         uses: appleboy/ssh-action@v1.2.0
         env:
@@ -49,6 +49,27 @@ jobs:
           HTTP_TIMEOUT: ${{ secrets.HTTP_TIMEOUT }}
           MAX_PAGE_TEXT_CHARS: ${{ secrets.MAX_PAGE_TEXT_CHARS }}
           USER_AGENT: ${{ secrets.USER_AGENT }}
+        with:
+          host: ${{ secrets.SERVER_IP }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: DATABASE_URL,TELEGRAM_BOT_TOKEN,TELEGRAM_ALLOWED_CHAT_ID,LLM_API_URL,LLM_API_KEY,LLM_MODEL,SCRAPE_INTERVAL,HTTP_TIMEOUT,MAX_PAGE_TEXT_CHARS,USER_AGENT
+          script: |
+            mkdir -p /opt/scraper
+            cat > /opt/scraper/.env <<EOF
+            DATABASE_URL=${DATABASE_URL}
+            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+            TELEGRAM_ALLOWED_CHAT_ID=${TELEGRAM_ALLOWED_CHAT_ID}
+            LLM_API_URL=${LLM_API_URL}
+            LLM_API_KEY=${LLM_API_KEY}
+            LLM_MODEL=${LLM_MODEL}
+            SCRAPE_INTERVAL=${SCRAPE_INTERVAL}
+            HTTP_TIMEOUT=${HTTP_TIMEOUT}
+            MAX_PAGE_TEXT_CHARS=${MAX_PAGE_TEXT_CHARS}
+            USER_AGENT=${USER_AGENT}
+            EOF
+            chmod 600 /opt/scraper/.env
 
       - name: Copy to server
         uses: appleboy/scp-action@v0.1.7
