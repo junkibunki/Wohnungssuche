@@ -64,3 +64,9 @@ go run ./cmd/bot
 - Das Projekt erwartet ein OpenAI-kompatibles LLM-API-Format.
 - Die LLM-Ausgabe wird als JSON gespeichert, damit die Felder später erweitert oder anders ausgewertet werden können.
 - Die Deduplizierung basiert auf URL, Titel, Zusammenfassung und dem extrahierten JSON.
+
+## Deployment Mit GitHub Secrets
+
+- Lege in GitHub Actions folgende Repository-Secrets an: `DEPLOY_HOST`, `DEPLOY_USER`, `SSH_PRIVATE_KEY`, optional `SSH_PASSPHRASE`, sowie alle App-Variablen aus `.env.example`.
+- Der Workflow in `.github/workflows/deploy.yml` baut `./cmd/bot` als Linux-Binary, kopiert die Binary und die Systemd-Unit auf den Server und schreibt `/etc/scraper/scraper.env` aus den GitHub-Secrets.
+- Die bereitgestellte Unit-Datei in `deploy/scraper.service` lädt die Laufzeitvariablen über `EnvironmentFile=-/etc/scraper/scraper.env`.

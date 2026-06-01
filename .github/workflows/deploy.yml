@@ -1,0 +1,80 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build Linux binary
+        run: |
+          mkdir -p dist
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o dist/app ./cmd/bot
+
+      - name: Copy binary and service file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          source: dist/app,deploy/scraper.service
+          target: /tmp/wohnungssuche-deploy
+          strip_components: 1
+
+      - name: Install binary, write environment, and restart service
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALLOWED_CHAT_ID: ${{ secrets.TELEGRAM_ALLOWED_CHAT_ID }}
+          LLM_API_URL: ${{ secrets.LLM_API_URL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          SCRAPE_INTERVAL: ${{ secrets.SCRAPE_INTERVAL }}
+          HTTP_TIMEOUT: ${{ secrets.HTTP_TIMEOUT }}
+          MAX_PAGE_TEXT_CHARS: ${{ secrets.MAX_PAGE_TEXT_CHARS }}
+          USER_AGENT: ${{ secrets.USER_AGENT }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: DATABASE_URL,TELEGRAM_BOT_TOKEN,TELEGRAM_ALLOWED_CHAT_ID,LLM_API_URL,LLM_API_KEY,LLM_MODEL,SCRAPE_INTERVAL,HTTP_TIMEOUT,MAX_PAGE_TEXT_CHARS,USER_AGENT
+          script: |
+            install -d -m 755 /opt/scraper
+            install -d -m 700 /etc/scraper
+            install -m 755 /tmp/wohnungssuche-deploy/app /opt/scraper/app
+            install -m 644 /tmp/wohnungssuche-deploy/scraper.service /etc/systemd/system/scraper.service
+
+            cat >/etc/scraper/scraper.env <<EOF
+            DATABASE_URL=${DATABASE_URL}
+            TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+            TELEGRAM_ALLOWED_CHAT_ID=${TELEGRAM_ALLOWED_CHAT_ID}
+            LLM_API_URL=${LLM_API_URL}
+            LLM_API_KEY=${LLM_API_KEY}
+            LLM_MODEL=${LLM_MODEL}
+            SCRAPE_INTERVAL=${SCRAPE_INTERVAL}
+            HTTP_TIMEOUT=${HTTP_TIMEOUT}
+            MAX_PAGE_TEXT_CHARS=${MAX_PAGE_TEXT_CHARS}
+            USER_AGENT=${USER_AGENT}
+            EOF
+
+            chmod 600 /etc/scraper/scraper.env
+            systemctl daemon-reload
+            systemctl enable scraper.service
+            systemctl restart scraper.service
+            systemctl --no-pager --full status scraper.service
